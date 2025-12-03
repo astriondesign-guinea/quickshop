@@ -1,206 +1,227 @@
-
 /**
- * QuickShop backend
- * - POST /create-payment-intent  -> { clientSecret }
- * - POST /webhook                -> Stripe webhook that inserts order into Supabase
+ * server.js
+ * Node/Express backend to orchestrate Orange & MTN Mobile Money payments
  *
- * Notes:
- * - Use SUPABASE_SERVICE_ROLE on the server only (never expose to clients)
- * - Configure env vars (see .env.example)
+ * IMPORTANT: fill env vars below before running:
+ *
+ *   PORT=3000
+ *   SUPABASE_URL=...
+ *   SUPABASE_SERVICE_ROLE_KEY=...   (Supabase service_role key - keep secret)
+ *
+ *   ORANGE_API_BASE=https://api.orange.com  (example)
+ *   ORANGE_CLIENT_ID=...
+ *   ORANGE_CLIENT_SECRET=...
+ *   ORANGE_PROVIDER_ID=... (merchant id)
+ *
+ *   MTN_API_BASE=https://api.mtn.com (example)
+ *   MTN_API_KEY=...
+ *   MTN_SUBSCRIPTION_KEY=...
+ *
+ * This is a template. Provider request payloads will vary — consult provider docs and adapt.
  */
 
-import express from "express";
-import cors from "cors";
-import Stripe from "stripe";
-import { createClient } from "@supabase/supabase-js";
-import bodyParser from "body-parser";
+import express from 'express'
+import fetch from 'node-fetch'
+import bodyParser from 'body-parser'
+import { createClient } from '@supabase/supabase-js'
+import crypto from 'crypto'
 
-const app = express();
+const app = express()
+app.use(bodyParser.json())
 
-// ----------- ENV / CONFIG -------------
-const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
-const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET; // required for verifying webhook
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
-const GHS_RATE = parseFloat(process.env.GHS_RATE || "15"); // USD -> GHS conversion used if currency === 'ghs'
-const PORT = process.env.PORT || 9999;
+// ENV
+const PORT = process.env.PORT || 3000
+const SUPABASE_URL = process.env.SUPABASE_URL
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY // service role needed to write protected tables
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
-if (!STRIPE_SECRET_KEY) {
-  console.error("Missing STRIPE_SECRET_KEY");
-  process.exit(1);
-}
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
-  console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE");
-  process.exit(1);
-}
+const ORANGE_API_BASE = process.env.ORANGE_API_BASE || 'https://api.orange.com'
+const ORANGE_CLIENT_ID = process.env.ORANGE_CLIENT_ID || ''
+const ORANGE_CLIENT_SECRET = process.env.ORANGE_CLIENT_SECRET || ''
+const ORANGE_PROVIDER_ID = process.env.ORANGE_PROVIDER_ID || '' // merchant id
 
-const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2024-08-01" });
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
+const MTN_API_BASE = process.env.MTN_API_BASE || 'https://proxy.mtn.com' // example
+const MTN_API_KEY = process.env.MTN_API_KEY || ''
+const MTN_SUBSCRIPTION_KEY = process.env.MTN_SUBSCRIPTION_KEY || ''
 
-// Use json parser for non-webhook routes
-app.use(
-  cors({
-    origin: true,
-  })
-);
-app.use(express.json());
+// Helper to create unique payment id
+function makeId(){ return 'pay_' + Date.now() + '_' + crypto.randomBytes(3).toString('hex') }
 
-// ----- Helper: compute amount in smallest currency unit (cents) -----
-function toSmallestUnit(amount, currency = "usd") {
-  // amount is number in major unit (USD)
-  if (currency.toLowerCase() === "ghs") {
-    // convert GHS value expected? We assume client sends total in USD and requests 'ghs' if they want display only.
-    // Here we treat amount as USD and convert to GHS for charging: multiply by GHS_RATE
-    return Math.round(amount * GHS_RATE * 100);
-  }
-  return Math.round(amount * 100);
-}
-
-// ----------------- Create PaymentIntent -----------------
-/**
- * Expected body:
- * {
- *   cart: [{ id, title, price, quantity?, image }],
- *   name, phone, address, email,
- *   currency: 'usd' | 'ghs'    // optional
- * }
- */
-app.post("/create-payment-intent", async (req, res) => {
-  try {
-    const { cart = [], name = "", phone = "", address = "", email = "", currency = "usd" } = req.body;
-
-    if (!Array.isArray(cart) || cart.length === 0) {
-      return res.status(400).json({ error: "Cart is empty" });
-    }
-
-    // compute total in major currency (USD)
-    const totalUSD = cart.reduce((s, i) => {
-      const price = typeof i.price === "string" ? parseFloat(i.price) : i.price || 0;
-      const qty = i.quantity ? Number(i.quantity) : 1;
-      return s + price * qty;
-    }, 0);
-
-    // convert to smallest unit (cents or pesewas)
-    const amount = toSmallestUnit(totalUSD, currency);
-
-    // create a metadata object containing the order details (stringified)
-    const metadata = {
-      cart: JSON.stringify(cart),
-      name: name || "",
-      phone: phone || "",
-      address: address || "",
-      email: email || "",
-      currency: currency || "usd"
-    };
-
-    const paymentIntent = await stripe.paymentIntents.create({
+// Create payment record in Supabase (status: pending)
+async function createPaymentRecord({ payment_id, provider, amount, phone, name, items, rawProviderData }){
+  const { data, error } = await supabase
+    .from('payments')
+    .insert([{
+      payment_id,
+      provider,
       amount,
-      currency: currency === "ghs" ? "ghs" : "usd",
-      metadata,
-      receipt_email: email || undefined,
-      automatic_payment_methods: { enabled: true }
-    });
+      phone,
+      customer_name: name,
+      items,
+      status: 'pending',
+      provider_data: rawProviderData || null
+    }])
+    .select()
+  if(error) throw error
+  return data && data[0]
+}
 
-    return res.json({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id });
-  } catch (err) {
-    console.error("create-payment-intent error:", err);
-    return res.status(500).json({ error: (err && err.message) || "Server error" });
-  }
-});
+/**
+ * POST /api/create-payment/orange
+ * body: { amount, phone, name, items }
+ *
+ * This example uses a simple pattern:
+ *  - call Orange payment API (you must adapt to provider docs)
+ *  - store outgoing provider request info in payments row
+ *  - return payment_id to client
+ */
+app.post('/api/create-payment/orange', async (req, res) => {
+  try{
+    const { amount, phone, name, items } = req.body
+    if(!amount || !phone) return res.status(400).json({ error:'amount and phone required' })
+    const payment_id = makeId()
 
-// ----------------- Stripe webhook (verify raw body) -----------------
-// Stripe requires the raw body to verify signature. We'll use express.raw for this route.
-app.post(
-  "/webhook",
-  bodyParser.raw({ type: "application/json" }),
-  async (req, res) => {
-    const sig = req.headers["stripe-signature"];
-    let event;
-
-    if (!STRIPE_WEBHOOK_SECRET) {
-      console.warn("STRIPE_WEBHOOK_SECRET not configured - skipping signature verification (not recommended for production)");
-      // If not configured, parse body and process (less secure)
-      try {
-        event = JSON.parse(req.body.toString());
-      } catch (e) {
-        console.error("Webhook JSON parse error", e);
-        return res.status(400).send(`Webhook error: ${e.message}`);
-      }
-    } else {
-      try {
-        event = stripe.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
-      } catch (err) {
-        console.error("Webhook signature mismatch.", err.message);
-        return res.status(400).send(`Webhook Error: ${err.message}`);
-      }
+    // Example: create provider request payload (you must adapt to Orange's real API)
+    const providerPayload = {
+      merchant: ORANGE_PROVIDER_ID,
+      amount: amount,
+      currency: 'GNF', // or provider currency (check with provider)
+      phone: phone,
+      externalId: payment_id,
+      description: `QuickShop order ${payment_id}`
     }
 
-    // Handle the event
-    try {
-      if (event.type === "payment_intent.succeeded") {
-        const paymentIntent = event.data.object;
-        console.log("PaymentIntent succeeded:", paymentIntent.id);
+    // OPTIONAL: call Orange API here to initiate the payment (depends on provider)
+    // Example: (this is pseudo; see provider docs)
+    // const providerResp = await fetch(`${ORANGE_API_BASE}/v1/payments`, { method:'POST', headers:{...}, body: JSON.stringify(providerPayload) })
+    // const provJson = await providerResp.json()
 
-        // metadata contains our order data
-        const meta = paymentIntent.metadata || {};
-        const cart = meta.cart ? JSON.parse(meta.cart) : [];
-        const name = meta.name || "";
-        const phone = meta.phone || "";
-        const address = meta.address || "";
-        const userEmail = meta.email || "guest";
-        const currency = meta.currency || "usd";
+    const provJson = { simulated: true, note: 'You must replace with real Orange API call' }
 
-        // compute total in major unit from paymentIntent.amount (smallest unit)
-        const amountSmallest = paymentIntent.amount;
-        // Convert back to major unit (USD) - rough conversion (we used toSmallestUnit)
-        let totalMajor = amountSmallest / 100;
-        if (currency === "ghs") {
-          totalMajor = (amountSmallest / 100) / GHS_RATE;
-        }
+    // Save record to Supabase
+    const rec = await createPaymentRecord({
+      payment_id, provider: 'orange', amount, phone, name, items, rawProviderData: provJson
+    })
 
-        // Avoid duplicate inserts: store stripe_payment_intent
-        const stripe_id = paymentIntent.id;
-
-        // Insert order into Supabase (service role)
-        const { data, error } = await supabase.from("orders").insert([
-          {
-            user_email: userEmail,
-            items: cart,
-            total: totalMajor,
-            name,
-            phone,
-            address,
-            status: "paid",
-            stripe_payment_intent: stripe_id
-          }
-        ]);
-
-        if (error) {
-          console.error("Supabase insert error:", error);
-          // don't fail webhook; log and continue
-        } else {
-          console.log("Order saved to Supabase:", data && data[0] && data[0].id);
-        }
-      } else {
-        // handle other relevant events if you like
-        // console.log(`Unhandled event type ${event.type}`);
-      }
-
-      // Return a response to acknowledge receipt of the event
-      res.json({ received: true });
-    } catch (err) {
-      console.error("Webhook handler error:", err);
-      res.status(500).send("Webhook handler error");
-    }
+    return res.json({ paymentId: payment_id, status: 'pending', message:'Payment created (simulated).', nextAction: { instructions: 'User will receive a prompt on their Orange Money app / phone to accept payment. Check the status here.' } })
+  }catch(err){
+    console.error('orange create error', err)
+    return res.status(500).json({ error: err.message || String(err) })
   }
-);
+})
 
-// a lightweight health-check
-app.get("/", (req, res) => {
-  res.json({ ok: true, now: new Date().toISOString() });
-});
+/**
+ * POST /api/create-payment/mtn
+ * body: { amount, phone, name, items }
+ */
+app.post('/api/create-payment/mtn', async (req, res) => {
+  try{
+    const { amount, phone, name, items } = req.body
+    if(!amount || !phone) return res.status(400).json({ error:'amount and phone required' })
+    const payment_id = makeId()
 
-// start
-app.listen(PORT, () => {
-  console.log(`Server listening on ${PORT}`);
-});
+    // Provider payload (pseudo)
+    const providerPayload = { amount, phone, externalId: payment_id, currency: 'GNF', description:`QuickShop ${payment_id}` }
+
+    // TODO: call MTN API per their docs
+    const provJson = { simulated: true, note: 'Replace with real MTN API call' }
+
+    const rec = await createPaymentRecord({
+      payment_id, provider: 'mtn', amount, phone, name, items, rawProviderData: provJson
+    })
+
+    return res.json({ paymentId: payment_id, status:'pending', message:'MTN payment created (simulated).', nextAction: { instructions: 'User will receive a prompt on their MTN MoMo to accept payment. Check status here.' } })
+  }catch(err){
+    console.error('mtn create error', err)
+    return res.status(500).json({ error: err.message || String(err) })
+  }
+})
+
+/**
+ * GET /api/payment-status/:paymentId
+ * returns payment row from Supabase
+ */
+app.get('/api/payment-status/:paymentId', async (req, res) => {
+  try{
+    const paymentId = req.params.paymentId
+    const { data, error } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('payment_id', paymentId)
+      .limit(1)
+    if(error) return res.status(500).json({ error: error.message })
+    if(!data || data.length===0) return res.status(404).json({ error: 'not found' })
+    const p = data[0]
+    res.json({ status: p.status, payment: p, message: p.provider_message || null })
+  }catch(err){
+    res.status(500).json({ error: err.message })
+  }
+})
+
+/**
+ * Webhooks that providers call to update payment status.
+ * You'll configure these URLs in their merchant dashboard
+ */
+app.post('/webhook/orange', async (req, res) => {
+  // Validate webhook signature per provider docs; omitted here
+  try{
+    const body = req.body
+    // body should contain externalId/payment id and status
+    const paymentId = body.externalId || body.payment_id || body.reference
+    const status = (body.status || body.result || 'pending').toLowerCase()
+    const provider_message = body
+
+    if(!paymentId) return res.status(400).send('missing id')
+
+    await supabase.from('payments').update({ status, provider_data: provider_message }).eq('payment_id', paymentId)
+    // Optionally also insert a record into orders table when paid
+    if(status === 'paid' || status === 'success' || status === 'completed'){
+      // create order record (example)
+      const p = (await supabase.from('payments').select('*').eq('payment_id', paymentId).limit(1)).data?.[0]
+      if(p){
+        await supabase.from('orders').insert([{
+          user_email: p.phone || 'guest',
+          items: p.items,
+          total: p.amount,
+          name: p.customer_name || '',
+          address: 'Mobile money',
+          status: 'pending'
+        }])
+      }
+    }
+    res.send('ok')
+  }catch(err){
+    console.error('webhook orange', err)
+    res.status(500).send('err')
+  }
+})
+
+app.post('/webhook/mtn', async (req, res) => {
+  try{
+    const body = req.body
+    const paymentId = body.externalId || body.payment_id || body.reference
+    const status = (body.status || body.result || 'pending').toLowerCase()
+    const provider_message = body
+    if(!paymentId) return res.status(400).send('missing id')
+    await supabase.from('payments').update({ status, provider_data: provider_message }).eq('payment_id', paymentId)
+    if(status === 'paid' || status === 'success' || status === 'completed'){
+      const p = (await supabase.from('payments').select('*').eq('payment_id', paymentId).limit(1)).data?.[0]
+      if(p){
+        await supabase.from('orders').insert([{
+          user_email: p.phone || 'guest',
+          items: p.items,
+          total: p.amount,
+          name: p.customer_name || '',
+          address: 'Mobile money',
+          status: 'pending'
+        }])
+      }
+    }
+    res.send('ok')
+  }catch(err){
+    console.error('webhook mtn', err)
+    res.status(500).send('err')
+  }
+})
+
+app.listen(PORT, ()=> console.log(`Server running on ${PORT}`))
