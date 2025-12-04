@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Votre Panier — ArionsDesign</title>
+
+<style>
+body {
+  font-family: Montserrat, sans-serif;
+  background: #f5f7fa;
+  margin: 0;
+  padding: 0;
+}
+.container {
+  padding: 16px;
+}
+.card {
+  background: white;
+  padding: 14px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+}
+.card img {
+  width: 90px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #eee;
+}
+.price {
+  color: #0f4af1;
+  font-weight: 700;
+  margin-top: 6px;
+}
+.qty-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.qty-btn {
+  width: 32px;
+  height: 32px;
+  background: #0f4af1;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 18px;
+  cursor: pointer;
+}
+.qty-number {
+  font-size: 16px;
+  font-weight: 700;
+}
+.remove-btn {
+  margin-top: 10px;
+  background: #ef4444;
+  color: white;
+  border: 0;
+  padding: 10px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.summary {
+  background: white;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+}
+.total {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f4af1;
+}
+.checkout-btn {
+  margin-top: 16px;
+  width: 100%;
+  background: #0f4af1;
+  color: white;
+  padding: 14px;
+  border-radius: 10px;
+  border: 0;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+}
+header {
+  background: white;
+  padding: 18px;
+  font-size: 20px;
+  font-weight: 700;
+  border-bottom: 1px solid #ddd;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  🛒 Votre Panier
+</header>
+
+<div class="container">
+
+  <div id="cartItems"></div>
+
+  <div id="summary" class="summary" style="display:none;">
+    <p>Sous-total: <span id="subtotal">0 GNF</span></p>
+    <p>Frais de livraison total: <span id="delivery">0 GNF</span></p>
+    <hr>
+    <p class="total">Total: <span id="total">0 GNF</span></p>
+
+    <button class="checkout-btn" onclick="location.href='checkout.html'">
+      Continuer vers le Paiement
+    </button>
+  </div>
+
+</div>
+
+<script>
+/* FORMATTER */
+function formatGNF(n) {
+  return new Intl.NumberFormat('fr-FR').format(n) + " GNF";
+}
+
+/* CART FUNCTIONS */
+function getCart() {
+  return JSON.parse(localStorage.getItem("cart") || "[]");
+}
+function saveCart(c) {
+  localStorage.setItem("cart", JSON.stringify(c));
+}
+
+/* UPDATE QUANTITY */
+function updateQty(index, change) {
+  const cart = getCart();
+  cart[index].qty = Math.max(1, (cart[index].qty || 1) + change);
+  saveCart(cart);
+  loadCart();
+}
+
+/* REMOVE ITEM */
+function removeItem(index) {
+  const cart = getCart();
+  cart.splice(index, 1);
+  saveCart(cart);
+  loadCart();
+}
+
+/* LOAD CART */
+function loadCart() {
+  const cart = getCart();
+  const box = document.getElementById("cartItems");
+  const summary = document.getElementById("summary");
+
+  if (cart.length === 0) {
+    box.innerHTML = "<p style='text-align:center;color:#777;'>Votre panier est vide.</p>";
+    summary.style.display = "none";
+    return;
+  }
+
+  summary.style.display = "block";
+  box.innerHTML = "";
+
+  let subtotal = 0;
+  let deliveryTotal = 0;
+
+  cart.forEach((item, i) => {
+    const price = Number(item.price_gnf) || 0;
+    const qty = item.qty || 1;
+    const delivery = Number(item.delivery_gnf) || 0;
+
+    subtotal += price * qty;
+    deliveryTotal += delivery;
+
+    const image = item.image || "https://via.placeholder.com/150?text=Image";
+
+    box.innerHTML += `
+      <div class="card">
+        <img src="${image}" alt="Produit">
+        <div style="flex:1;">
+          <div><strong>${item.title}</strong></div>
+          <div class="price">${formatGNF(price)} × ${qty}</div>
+          <div style="font-size:13px;color:#666;margin-top:4px;">
+            Livraison: ${formatGNF(delivery)}
+          </div>
+
+          <div class="qty-box">
+            <button class="qty-btn" onclick="updateQty(${i}, -1)">−</button>
+            <span class="qty-number">${qty}</span>
+            <button class="qty-btn" onclick="updateQty(${i}, 1)">+</button>
+          </div>
+
+          <button class="remove-btn" onclick="removeItem(${i})">Supprimer</button>
+        </div>
+      </div>
+    `;
+  });
+
+  const total = subtotal + deliveryTotal;
+
+  document.getElementById("subtotal").textContent = formatGNF(subtotal);
+  document.getElementById("delivery").textContent = formatGNF(deliveryTotal);
+  document.getElementById("total").textContent = formatGNF(total);
+}
+
+loadCart();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Authentification — ArionsDesign</title>
+
+<style>
+body {
+  font-family: system-ui;
+  margin: 0;
+  padding: 0;
+  background: #f5f5f5;
+}
+
+.container {
+  max-width: 420px;
+  margin: auto;
+  padding: 20px;
+}
+
+.card {
+  background: white;
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.07);
+}
+
+h2 {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+input {
+  width: 100%;
+  padding: 12px;
+  margin-top: 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+}
+
+.btn {
+  margin-top: 18px;
+  width: 100%;
+  background: #0f4af1;
+  color: white;
+  padding: 14px;
+  border: none;
+  border-radius: 10px;
+  font-size: 17px;
+}
+
+.small-link {
+  display: block;
+  margin-top: 12px;
+  text-align: center;
+  color: #0f4af1;
+  text-decoration: none;
+  font-size: 15px;
+}
+
+.toggle-pass {
+  float: right;
+  margin-top: -34px;
+  margin-right: 10px;
+  cursor: pointer;
+  color: #0f4af1;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <!-- LOGIN SCREEN -->
+  <div id="loginCard" class="card">
+    <h2>Connexion</h2>
+
+    <input type="email" id="loginEmail" placeholder="Adresse email" />
+
+    <div style="position:relative;">
+      <input type="password" id="loginPassword" placeholder="Mot de passe" />
+      <span class="toggle-pass" onclick="togglePass('loginPassword')">👁️</span>
+    </div>
+
+    <button class="btn" onclick="login()">Se connecter</button>
+
+    <a href="#" class="small-link" onclick="showSignup()">Créer un compte</a>
+    <a href="#" class="small-link" onclick="showForgot()">Mot de passe oublié ?</a>
+
+    <p id="loginMsg" style="text-align:center;color:red;"></p>
+  </div>
+
+
+  <!-- SIGNUP SCREEN -->
+  <div id="signupCard" class="card" style="display:none;">
+    <h2>Créer un compte</h2>
+
+    <input type="email" id="signupEmail" placeholder="Adresse email" />
+
+    <div style="position:relative;">
+      <input type="password" id="signupPassword" placeholder="Mot de passe" />
+      <span class="toggle-pass" onclick="togglePass('signupPassword')">👁️</span>
+    </div>
+
+    <button class="btn" onclick="signup()">Créer un compte</button>
+
+    <a href="#" class="small-link" onclick="showLogin()">Déjà un compte ? Se connecter</a>
+    <p id="signupMsg" style="text-align:center;color:red;"></p>
+  </div>
+
+
+  <!-- FORGOT PASSWORD SCREEN -->
+  <div id="forgotCard" class="card" style="display:none;">
+    <h2>Réinitialiser le mot de passe</h2>
+
+    <input type="email" id="forgotEmail" placeholder="Votre email" />
+
+    <button class="btn" onclick="resetPassword()">Envoyer le lien</button>
+
+    <a class="small-link" onclick="showLogin()">Retour</a>
+    <p id="forgotMsg" style="text-align:center;color:red;"></p>
+  </div>
+
+</div>
+
+
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+const supabase = createClient(
+  "https://msavtmwvhyboplytisiz.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1zYXZ0bXd2aHlib3BseXRpc2l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2MjAxOTAsImV4cCI6MjA4MDE5NjE5MH0.PE_chxqgi335cTnnX4zaPCMTdIzM_LClnpWRRM_007E"
+);
+
+
+// -------------------------------------------------------------
+// UI SWITCHERS
+// -------------------------------------------------------------
+
+window.showSignup = function() {
+  loginCard.style.display = "none";
+  signupCard.style.display = "block";
+  forgotCard.style.display = "none";
+};
+
+window.showLogin = function() {
+  loginCard.style.display = "block";
+  signupCard.style.display = "none";
+  forgotCard.style.display = "none";
+};
+
+window.showForgot = function() {
+  loginCard.style.display = "none";
+  signupCard.style.display = "none";
+  forgotCard.style.display = "block";
+};
+
+
+// -------------------------------------------------------------
+// PASSWORD TOGGLE
+// -------------------------------------------------------------
+window.togglePass = function(id) {
+  const input = document.getElementById(id);
+  input.type = input.type === "password" ? "text" : "password";
+};
+
+
+// -------------------------------------------------------------
+// LOGIN FUNCTION
+// -------------------------------------------------------------
+window.login = async function () {
+  const email = loginEmail.value.trim();
+  const password = loginPassword.value.trim();
+  const msg = document.getElementById("loginMsg");
+
+  msg.textContent = "Patientez...";
+
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    msg.textContent = "Erreur : " + error.message;
+    return;
+  }
+
+  msg.style.color = "green";
+  msg.textContent = "Connexion réussie !";
+
+  setTimeout(() => { window.location.href = "index.html"; }, 700);
+};
+
+
+// -------------------------------------------------------------
+// SIGNUP + OTP
+// -------------------------------------------------------------
+window.signup = async function () {
+  const email = signupEmail.value.trim();
+  const password = signupPassword.value.trim();
+  const msg = document.getElementById("signupMsg");
+
+  if (!email || !password) {
+    msg.textContent = "Veuillez remplir tous les champs.";
+    return;
+  }
+
+  msg.textContent = "Création du compte...";
+
+  // Step 1 — Create user
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: "https://msavtmwvhyboplytisiz.supabase.co/auth/v1/callback"
+    }
+  });
+
+  if (error) {
+    msg.textContent = "Erreur : " + error.message;
+    return;
+  }
+
+  msg.style.color = "green";
+  msg.textContent = "Compte créé ! Vérifiez votre email.";
+
+  signupEmail.value = "";
+  signupPassword.value = "";
+};
+
+
+// -------------------------------------------------------------
+// RESET PASSWORD
+// -------------------------------------------------------------
+window.resetPassword = async function () {
+  const email = forgotEmail.value.trim();
+  const msg = document.getElementById("forgotMsg");
+
+  msg.textContent = "Envoi du lien...";
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + "/reset.html"
+  });
+
+  if (error) {
+    msg.textContent = "Erreur : " + error.message;
+    return;
+  }
+
+  msg.style.color = "green";
+  msg.textContent = "Lien envoyé ! Vérifiez votre boite email.";
+};
+</script>
+
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mes Commandes — ArionsDesign</title>
+
+<style>
+body {
+  font-family: system-ui;
+  margin: 0;
+  background: #f5f5f5;
+}
+
+header {
+  background: white;
+  padding: 15px;
+  font-size: 22px;
+  font-weight: bold;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.container {
+  padding: 15px;
+}
+
+.order {
+  background: white;
+  margin-bottom: 18px;
+  padding: 15px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.order h3 {
+  margin: 0 0 10px 0;
+}
+
+.item-box {
+  background: #f1f1f1;
+  padding: 10px;
+  margin-top: 10px;
+  border-radius: 8px;
+}
+
+.status {
+  font-weight: bold;
+  color: #0f4af1;
+  margin-top: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<header>📦 Mes Commandes</header>
+
+<div class="container">
+  <div id="orderList">Chargement…</div>
+</div>
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+/* Supabase */
+const supabase = createClient(
+  "https://msavtmwvhyboplytisiz.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1zYXZ0bXd2aHlib3BseXRpc2l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2MjAxOTAsImV4cCI6MjA4MDE5NjE5MH0.PE_chxqgi335cTnnX4zaPCMTdIzM_LClnpWRRM_007E"
+);
+
+/* -------------------------------
+   LOAD ORDERS
+-------------------------------- */
+async function loadOrders() {
+  const box = document.getElementById("orderList");
+
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    box.innerHTML = "Erreur de chargement.";
+    return;
+  }
+
+  if (!data.length) {
+    box.innerHTML = "<p>Aucune commande trouvée.</p>";
+    return;
+  }
+
+  box.innerHTML = "";
+
+  data.forEach(order => {
+    let itemsHTML = "";
+
+    try {
+      const items = order.items || [];
+
+      items.forEach(it => {
+        itemsHTML += `
+          <div class="item-box">
+            <b>${it.title}</b><br>
+            Prix: ${new Intl.NumberFormat("fr-FR").format(it.price_gnf)} GNF<br>
+            Quantité: ${it.qty}
+          </div>
+        `;
+      });
+
+    } catch(e) {
+      itemsHTML = "<p>Erreur lors du chargement des articles.</p>";
+    }
+
+    box.innerHTML += `
+      <div class="order">
+        <h3>Commande #${order.id.substring(0, 6)}...</h3>
+
+        <p><b>Nom :</b> ${order.name}</p>
+        <p><b>Téléphone :</b> ${order.phone}</p>
+        <p><b>Adresse :</b> ${order.address}</p>
+        <p><b>Méthode de paiement :</b> ${order.payment_method}</p>
+
+        ${
+          order.proof_url
+          ? `<p><b>Preuve de paiement :</b><br><img src="${order.proof_url}" width="180" style="border-radius:8px;margin-top:6px;"></p>`
+          : ""
+        }
+
+        <p><b>Total :</b> ${new Intl.NumberFormat("fr-FR").format(order.total_gnf)} GNF</p>
+
+        <div class="status">Statut : ${order.status}</div>
+
+        <h4>Articles :</h4>
+        ${itemsHTML}
+      </div>
+    `;
+  });
+}
+
+loadOrders();
+</script>
+
+</body>
+</html>

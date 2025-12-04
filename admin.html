@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Admin — ArionsDesign</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: system-ui;
+  background: #f5f5f5;
+}
+
+/* HEADER */
+header {
+  background: white;
+  padding: 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+}
+
+.logo {
+  font-size: 20px;
+  font-weight: bold;
+  color: #0f4af1;
+}
+
+.hamburger {
+  font-size: 26px;
+  cursor: pointer;
+}
+
+/* OVERLAY */
+#overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: none;
+  z-index: 9;
+}
+
+/* SIDE MENU */
+.side-menu {
+  position: fixed;
+  left: -260px;
+  top: 0;
+  width: 240px;
+  height: 100%;
+  background: white;
+  padding: 20px;
+  box-shadow: 2px 0 8px rgba(0,0,0,0.15);
+  transition: left .3s;
+  z-index: 10;
+}
+
+.side-menu a {
+  display: block;
+  margin-bottom: 20px;
+  text-decoration: none;
+  font-size: 18px;
+  color: #333;
+  font-weight: 500;
+}
+.side-menu a:hover {
+  color: #0f4af1;
+}
+
+/* FORM CARD */
+.card {
+  background: white;
+  padding: 18px;
+  margin: 18px;
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+input, textarea {
+  width: 100%;
+  padding: 12px;
+  margin-top: 6px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+  font-size: 15px;
+}
+
+button {
+  width: 100%;
+  padding: 15px;
+  background: #0f4af1;
+  border: none;
+  color: white;
+  border-radius: 10px;
+  font-size: 17px;
+  cursor: pointer;
+}
+
+#msg {
+  margin-top: 10px;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* PRODUCT LIST */
+.product-box {
+  margin: 20px;
+}
+
+.product {
+  background: white;
+  padding: 12px;
+  border-radius: 10px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+.product img {
+  width: 70px;
+  height: 70px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.action-buttons {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.edit-btn {
+  background: #ffaa00;
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+.delete-btn {
+  background: #e53935;
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: white;
+}
+</style>
+</head>
+
+<body>
+
+<!-- OVERLAY -->
+<div id="overlay"></div>
+
+<!-- SIDE MENU -->
+<div id="sideMenu" class="side-menu">
+  <a href="index.html">🏠 Accueil</a>
+  <a href="admin.html">🛠 Panneau Admin</a>
+  <a href="orders.html">📦 Commandes</a>
+  <a href="auth.html">🔐 Connexion / Compte</a>
+</div>
+
+<header>
+  <div class="logo">ArionsDesign — Admin</div>
+  <div class="hamburger" id="menuBtn">☰</div>
+</header>
+
+<!-- ADD / EDIT PRODUCT CARD -->
+<div class="card">
+  <h2 id="formTitle">Ajouter un produit</h2>
+
+  <label>Titre</label>
+  <input id="title">
+
+  <label>Description</label>
+  <textarea id="description"></textarea>
+
+  <label>Catégorie</label>
+  <input id="category">
+
+  <label>Prix (GNF)</label>
+  <input id="price" type="number">
+
+  <label>Frais de livraison (GNF)</label>
+  <input id="delivery" type="number">
+
+  <label>Image</label>
+  <input type="file" id="image" accept="image/*">
+
+  <button id="saveButton" onclick="addProduct()">Ajouter</button>
+
+  <div id="msg"></div>
+</div>
+
+<!-- PRODUCT LIST -->
+<div class="product-box">
+  <h2 style="margin-left:8px;">Produits</h2>
+  <div id="productList"></div>
+</div>
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+/* SUPABASE INIT */
+const supabase = createClient(
+  "https://msavtmwvhyboplytisiz.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1zYXZ0bXd2aHlib3BseXRpc2l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2MjAxOTAsImV4cCI6MjA4MDE5NjE5MH0.PE_chxqgi335cTnnX4zaPCMTdIzM_LClnpWRRM_007E"
+);
+
+/* ---------------- MENU ---------------- */
+const menu = document.getElementById("sideMenu");
+const overlay = document.getElementById("overlay");
+const menuBtn = document.getElementById("menuBtn");
+
+menuBtn.onclick = () => openMenu();
+overlay.onclick = () => closeMenu();
+
+function openMenu() {
+  menu.style.left = "0px";
+  overlay.style.display = "block";
+}
+function closeMenu() {
+  menu.style.left = "-260px";
+  overlay.style.display = "none";
+}
+
+/* ---------------- ADD PRODUCT ---------------- */
+let editMode = false;
+let editId = null;
+
+window.addProduct = async function () {
+  const msg = document.getElementById("msg");
+  msg.style.color = "black";
+  msg.textContent = "Traitement...";
+
+  const title = document.getElementById("title").value.trim();
+  const description = document.getElementById("description").value.trim();
+  const category = document.getElementById("category").value.trim();
+  const price = Number(document.getElementById("price").value);
+  const delivery = Number(document.getElementById("delivery").value);
+  const file = document.getElementById("image").files[0];
+
+  if (!title || !price) {
+    msg.style.color = "red";
+    msg.textContent = "Veuillez remplir les champs obligatoires.";
+    return;
+  }
+
+  let imageUrl = null;
+
+  // Upload image only if provided
+  if (file) {
+    const fileName = Date.now() + "_" + file.name;
+
+    const { error: uploadErr } = await supabase.storage
+      .from("products")
+      .upload(fileName, file);
+
+    if (uploadErr) {
+      msg.style.color = "red";
+      msg.textContent = "Erreur lors de l’upload de l’image.";
+      return;
+    }
+
+    imageUrl =
+      "https://msavtmwvhyboplytisiz.supabase.co/storage/v1/object/public/products/" +
+      fileName;
+  }
+
+  /* EDIT MODE */
+  if (editMode) {
+    const updateData = {
+      title,
+      description,
+      category,
+      price_gnf: price,
+      delivery_gnf: delivery,
+    };
+
+    if (imageUrl) updateData.image_url = imageUrl;
+
+    const { error } = await supabase
+      .from("products")
+      .update(updateData)
+      .eq("id", editId);
+
+    if (error) {
+      msg.style.color = "red";
+      msg.textContent = "Erreur : " + error.message;
+      return;
+    }
+
+    msg.style.color = "green";
+    msg.textContent = "Produit mis à jour !";
+
+    resetForm();
+    loadProducts();
+    return;
+  }
+
+  /* ADD NEW PRODUCT */
+  const { error } = await supabase.from("products").insert({
+    title,
+    description,
+    category,
+    price_gnf: price,
+    delivery_gnf: delivery,
+    image_url: imageUrl,
+    available: true,
+  });
+
+  if (error) {
+    msg.style.color = "red";
+    msg.textContent = "Erreur : " + error.message;
+    return;
+  }
+
+  msg.style.color = "green";
+  msg.textContent = "Produit ajouté !";
+
+  resetForm();
+  loadProducts();
+};
+
+/* RESET FORM */
+function resetForm() {
+  editMode = false;
+  editId = null;
+  document.getElementById("formTitle").textContent = "Ajouter un produit";
+  document.getElementById("saveButton").textContent = "Ajouter";
+  document.querySelectorAll("input, textarea").forEach(el => (el.value = ""));
+}
+
+/* ---------------- LOAD PRODUCTS ---------------- */
+async function loadProducts() {
+  const list = document.getElementById("productList");
+  list.innerHTML = "Chargement...";
+
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    list.innerHTML = "Erreur de chargement.";
+    return;
+  }
+
+  list.innerHTML = "";
+
+  data.forEach(p => {
+    list.innerHTML += `
+      <div class="product">
+        <img src="${p.image_url}">
+        <div>
+          <b>${p.title}</b><br>
+          ${new Intl.NumberFormat("fr-FR").format(p.price_gnf)} GNF
+        </div>
+
+        <div class="action-buttons">
+          <button class="edit-btn" onclick="editProduct('${p.id}')">Modifier</button>
+          <button class="delete-btn" onclick="deleteProduct('${p.id}')">Supprimer</button>
+        </div>
+      </div>
+    `;
+  });
+}
+
+/* ---------------- DELETE PRODUCT ---------------- */
+window.deleteProduct = async function (id) {
+  if (!confirm("Supprimer ce produit ?")) return;
+
+  await supabase.from("products").delete().eq("id", id);
+  loadProducts();
+};
+
+/* ---------------- EDIT PRODUCT ---------------- */
+window.editProduct = async function (id) {
+  const { data } = await supabase.from("products").select("*").eq("id", id).single();
+
+  editMode = true;
+  editId = id;
+
+  document.getElementById("formTitle").textContent = "Modifier le produit";
+  document.getElementById("saveButton").textContent = "Mettre à jour";
+
+  document.getElementById("title").value = data.title;
+  document.getElementById("description").value = data.description;
+  document.getElementById("category").value = data.category;
+  document.getElementById("price").value = data.price_gnf;
+  document.getElementById("delivery").value = data.delivery_gnf;
+};
+
+loadProducts();
+</script>
+
+</body>
+</html>

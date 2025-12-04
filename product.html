@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Produit — ArionsDesign</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --brand:#0f4af1;
+  --bg:#f5f7fa;
+  --card:#ffffff;
+  --text:#0f172a;
+  --muted:#6b7280;
+  --shadow:0 12px 30px rgba(0,0,0,0.06);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Montserrat",system-ui;background:var(--bg);color:var(--text);line-height:1.5}
+.container{width:94%;max-width:900px;margin:auto;padding-bottom:80px}
+header{background:var(--card);padding:14px 0;border-bottom:1px solid #e5e7eb;position:sticky;top:0;z-index:500}
+.header-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.logo{font-size:20px;font-weight:700}
+.logo span{color:var(--brand)}
+.back { text-decoration:none;color:var(--text);font-weight:600 }
+
+.card{background:var(--card);padding:14px;border-radius:12px;box-shadow:var(--shadow);margin-top:16px}
+.product-grid{display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:820px){ .product-grid{grid-template-columns:360px 1fr} }
+
+.product-image{width:100%;height:360px;object-fit:cover;border-radius:10px;background:#f0f0f0}
+.title{font-size:20px;font-weight:800;margin-bottom:6px}
+.category{font-size:13px;color:var(--muted);margin-bottom:8px}
+.price{font-size:22px;color:var(--brand);font-weight:800;margin-bottom:6px}
+.desc{color:var(--muted);margin-bottom:12px}
+
+.controls{display:flex;gap:12px;align-items:center;margin-top:12px}
+.qty{
+  display:inline-flex;align-items:center;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;
+}
+.qty button{background:white;border:0;padding:10px 12px;cursor:pointer;font-weight:700}
+.qty span{padding:10px 18px;min-width:54px;text-align:center;font-weight:700}
+
+.btn{padding:12px 18px;border-radius:10px;border:0;cursor:pointer;font-weight:700}
+.btn-primary{background:var(--brand);color:white}
+.btn-outline{background:white;border:1px solid #e5e7eb;color:var(--text)}
+
+.cart-btn{
+  position:fixed;bottom:18px;right:18px;background:var(--brand);color:white;padding:12px 16px;border-radius:50px;
+  display:flex;gap:8px;align-items:center;box-shadow:0 8px 20px rgba(0,0,0,0.12);z-index:600
+}
+.cart-count{background:white;color:var(--brand);padding:4px 8px;border-radius:50%;font-weight:800}
+.small{font-size:13px;color:var(--muted)}
+
+.footer-space{height:120px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container header-row">
+    <div style="display:flex;gap:12px;align-items:center">
+      <a href="index.html" class="back">⬅ Retour</a>
+      <div class="logo"><span>Arions</span>Design</div>
+    </div>
+    <div>
+      <a href="cart.html" style="text-decoration:none;color:var(--muted)">Panier</a>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <div id="loading" class="card">Chargement du produit…</div>
+
+  <div id="productWrap" style="display:none">
+    <div class="card product-grid">
+      <div>
+        <img id="productImage" class="product-image" src="" alt="image produit">
+      </div>
+
+      <div>
+        <div class="title" id="productTitle">Titre</div>
+        <div class="category small" id="productCategory"></div>
+        <div class="price" id="productPrice">0 GNF</div>
+        <div class="desc" id="productDesc">Description...</div>
+
+        <div class="controls">
+          <div>
+            <label class="small">Quantité</label>
+            <div class="qty" style="margin-top:6px">
+              <button id="decBtn" aria-label="Minus">−</button>
+              <span id="qty">1</span>
+              <button id="incBtn" aria-label="Plus">+</button>
+            </div>
+          </div>
+
+          <div style="margin-left:auto">
+            <div class="small">Frais livraison</div>
+            <div id="deliveryGnf" style="font-weight:800;margin-top:6px">20 000 GNF</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-top:18px">
+          <button id="addToCart" class="btn btn-primary">Ajouter au panier</button>
+          <button id="buyNow" class="btn btn-outline">Acheter maintenant</button>
+        </div>
+
+        <div id="msg" style="margin-top:12px"></div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <div style="font-weight:700;margin-bottom:8px">Produits recommandés</div>
+    <div id="related" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px"></div>
+  </div>
+
+</main>
+
+<button class="cart-btn" onclick="location='cart.html'">
+  🛒 <span id="cartCount" class="cart-count">0</span>
+</button>
+
+<div class="footer-space"></div>
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+const SUPABASE_URL = "https://msavtmwvhyboplytisiz.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1zYXZ0bXd2aHlib3BseXRpc2l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2MjAxOTAsImV4cCI6MjA4MDE5NjE5MH0.PE_chxqgi335cTnnX4zaPCMTdIzM_LClnpWRRM_007E";
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+/* Cart utils */
+function getCart(){ return JSON.parse(localStorage.getItem("cart") || "[]"); }
+function saveCart(c){ localStorage.setItem("cart", JSON.stringify(c)); updateCartCount(); }
+function updateCartCount(){ document.getElementById("cartCount").textContent = getCart().reduce((s,i)=>s+i.qty,0) || 0; }
+updateCartCount();
+
+/* Helpers */
+function qsel(id){ return document.getElementById(id); }
+function formatGNF(n){ return new Intl.NumberFormat('fr-FR').format(Number(n)) + " GNF"; }
+
+/* Read id from querystring */
+const params = new URLSearchParams(location.search);
+const productId = params.get("id");
+
+/* Elements */
+const loadingEl = qsel("loading");
+const wrap = qsel("productWrap");
+const imgEl = qsel("productImage");
+const titleEl = qsel("productTitle");
+const catEl = qsel("productCategory");
+const priceEl = qsel("productPrice");
+const descEl = qsel("productDesc");
+const deliveryEl = qsel("deliveryGnf");
+const qtyEl = qsel("qty");
+const decBtn = qsel("decBtn");
+const incBtn = qsel("incBtn");
+const addBtn = qsel("addToCart");
+const buyBtn = qsel("buyNow");
+const msgEl = qsel("msg");
+const relatedEl = qsel("related");
+
+/* state */
+let product = null;
+let qty = 1;
+
+/* QTY handlers */
+decBtn.onclick = () => {
+  if(qty > 1){ qty--; qtyEl.textContent = qty; }
+};
+incBtn.onclick = () => { qty++; qtyEl.textContent = qty; };
+
+/* Load product */
+async function loadProduct(){
+  loadingEl.style.display = "block";
+  wrap.style.display = "none";
+  msgEl.textContent = "";
+
+  if(!productId){
+    loadingEl.textContent = "Produit introuvable (id manquant)";
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("id", productId)
+    .maybeSingle();
+
+  if(error || !data){
+    loadingEl.textContent = "Erreur chargement produit.";
+    console.error(error);
+    return;
+  }
+
+  product = data;
+
+  // Default fallback values (in case some columns are missing)
+  const image = product.image_url || "https://via.placeholder.com/600x400?text=No+Image";
+  const title = product.title || "Produit";
+  const category = product.category || "";
+  const description = product.description || "";
+  // Use price_gnf if available, otherwise try price_usd fallback (convert if you maintained it)
+  const price_gnf = product.price_gnf != null ? Number(product.price_gnf) : (product.price_usd ? Math.round(Number(product.price_usd) * 9000) : 0);
+  const delivery_gnf = product.delivery_gnf != null ? Number(product.delivery_gnf) : 20000;
+
+  // Render
+  imgEl.src = image;
+  titleEl.textContent = title;
+  catEl.textContent = category;
+  priceEl.textContent = formatGNF(price_gnf);
+  descEl.textContent = description;
+  deliveryEl.textContent = formatGNF(delivery_gnf);
+
+  // keep product normalized values on state for cart
+  product._price_gnf = price_gnf;
+  product._delivery_gnf = delivery_gnf;
+
+  loadingEl.style.display = "none";
+  wrap.style.display = "block";
+
+  // Load related (simple: other products same category)
+  loadRelated(category, product.id);
+}
+
+/* Related */
+async function loadRelated(category, excludeId){
+  relatedEl.innerHTML = "";
+  try{
+    let q = supabase.from("products").select("id,title,image_url,price_gnf,delivery_gnf").limit(6);
+    if(category) q = q.eq("category", category);
+    const res = await q;
+    if(res.error) return;
+    const items = (res.data || []).filter(i => String(i.id) !== String(excludeId)).slice(0,6);
+    items.forEach(i => {
+      const el = document.createElement("div");
+      el.className = "card";
+      el.style.padding = "10px";
+      el.innerHTML = `
+        <img src="${i.image_url || 'https://via.placeholder.com/300x200'}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px">
+        <div style="font-weight:700">${i.title}</div>
+        <div style="color:var(--muted);margin:6px 0">${formatGNF(i.price_gnf || 0)}</div>
+        <button class="btn btn-primary" data-id="${i.id}">Voir</button>
+      `;
+      const btn = el.querySelector("button");
+      btn.onclick = () => location.href = `product.html?id=${i.id}`;
+      relatedEl.appendChild(el);
+    });
+  }catch(e){ console.error(e); }
+}
+
+/* Add to cart logic */
+function addToCart(){
+  if(!product) return;
+  const cart = getCart();
+  const id = product.id;
+  const idx = cart.findIndex(it => String(it.id) === String(id));
+
+  const item = {
+    id: product.id,
+    title: product.title || "Produit",
+    price_gnf: Number(product._price_gnf || 0),
+    delivery_gnf: Number(product._delivery_gnf || 20000),
+    image_url: product.image_url || null,
+    qty
+  };
+
+  if(idx === -1){
+    cart.push(item);
+  } else {
+    cart[idx].qty = Number(cart[idx].qty || 1) + Number(qty);
+  }
+
+  saveCart(cart);
+  msgEl.style.color = "green";
+  msgEl.textContent = "Ajouté au panier !";
+  setTimeout(()=> msgEl.textContent = "", 1400);
+}
+
+/* Buy now: add to cart then go to checkout */
+async function buyNow(){
+  addToCart();
+  // small delay for UX
+  setTimeout(()=> location.href = "checkout.html", 400);
+}
+
+/* Wire buttons */
+addBtn.onclick = addToCart;
+buyBtn.onclick = buyNow;
+
+/* init */
+loadProduct();
+updateCartCount();
+</script>
+
+</body>
+</html>
